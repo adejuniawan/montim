@@ -1,15 +1,18 @@
 {
   "name": "montim",
   "version": "0.1.0",
-  "private": true,
   "dependencies": {
     "react": "^18.0.0",
     "react-dom": "^18.0.0",
     "react-scripts": "5.0.1",
-    "lucide-react": "^0.400.0"
+    "lucide-react": "^0.400.0",
+    "tailwindcss": "^3.4.0",
+    "postcss": "^8.4.0",
+    "autoprefixer": "^10.4.0"
   },
   "scripts": {
     "start": "react-scripts start",
-    "build": "react-scripts build"
+    "build": "react-scripts build",
+    "test": "react-scripts test"
   }
 }
