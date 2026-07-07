@@ -245,7 +245,7 @@ export default function ProjectDashboard() {
                                 <div className="p-1.5 bg-indigo-100 rounded-lg text-indigo-700">
                                   <Layers className="w-4 h-4" />
                                 </div>
-                                <span className="font-bold text-slate-800">Proyek Induk: {project.title}</span>
+                                <span className="font-bold text-slate-800">{project.title}</span>
                               </div>
                             </td>
                           </tr>
