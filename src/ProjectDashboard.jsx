@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Briefcase,
   BarChart3,
@@ -20,7 +20,8 @@ import {
   CalendarDays,
   FolderPlus,
   CornerDownRight,
-  Search
+  Search,
+  ChevronDown
 } from 'lucide-react';
 
 const initialTeamMembers = [
@@ -56,7 +57,7 @@ const emptyProjectForm = {
   title: '', year: new Date().getFullYear(), urgency: 'Medium', status: 'To Do'
 };
 
-export default function ProjectDashboard() {
+export default function App() {
   const [activeTab, setActiveTab] = useState('jobs'); 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterYear, setFilterYear] = useState('All');
@@ -68,14 +69,26 @@ export default function ProjectDashboard() {
   const [isEditingJob, setIsEditingJob] = useState(false);
   const [editJobForm, setEditJobForm] = useState(null);
 
-  // Modals State
+  // Modals & Menu State
+  const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
   const [isAddJobModalOpen, setIsAddJobModalOpen] = useState(false);
   const [newJobForm, setNewJobForm] = useState(emptyJobForm);
-
   const [isAddProjectModalOpen, setIsAddProjectModalOpen] = useState(false);
   const [newProjectForm, setNewProjectForm] = useState(emptyProjectForm);
 
-  // Filtering logic: Projects are shown if their title matches OR if they have jobs that match
+  // Dropdown ref to close when clicking outside
+  const dropdownRef = useRef(null);
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsAddMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Filtering logic
   const filteredProjects = projects.filter(project => {
     const projectMatchesSearch = project.title.toLowerCase().includes(searchTerm.toLowerCase());
     
@@ -87,13 +100,10 @@ export default function ProjectDashboard() {
       return job.projectId === project.id && matchesSearch && matchesYear && matchesStatus;
     });
 
-    // If searching, show project if its name matches OR its jobs match
     if (searchTerm) return projectMatchesSearch || hasMatchingJobs;
-    
-    // If only filtering by year/status, show project if it has matching jobs
     if (filterYear !== 'All' || filterStatus !== 'All') return hasMatchingJobs;
     
-    return true; // Show all by default
+    return true; 
   });
 
   const handleViewJobDetail = (job) => {
@@ -128,10 +138,7 @@ export default function ProjectDashboard() {
     if (!newProjectForm.title.trim()) return;
     const newProject = { ...newProjectForm, id: `p${Date.now()}` };
     setProjects([newProject, ...projects]);
-    
-    // Automatically select this new project in the job form
     setNewJobForm(prev => ({ ...prev, projectId: newProject.id }));
-    
     setIsAddProjectModalOpen(false);
     setNewProjectForm(emptyProjectForm);
   };
@@ -180,69 +187,61 @@ export default function ProjectDashboard() {
         {activeTab === 'jobs' && (
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
             
-            {/* --- INI FILTER & ACTION BAR BARU --- */}
-            <div className="flex flex-col lg:flex-row gap-4 justify-between bg-slate-50/50 p-4 rounded-2xl border border-slate-100">
-              <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
-                <div className="relative group">
-                  <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400 group-focus-within:text-indigo-500" />
-                  <input 
-                    type="text" 
-                    placeholder="Cari..." 
-                    onChange={(e) => setSearchTerm(e.target.value)} 
-                    className="pl-10 pr-4 py-2.5 border border-slate-300 rounded-xl outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 w-full sm:w-64 transition-all" 
-                  />
-                </div>
-                <div className="flex gap-3">
-                  <select onChange={(e) => setFilterYear(e.target.value)} className="border border-slate-300 rounded-xl px-4 py-2.5 outline-none focus:border-indigo-500 bg-white cursor-pointer">
-                    <option value="All">Semua Tahun</option>
-                    <option value="2026">2026</option>
-                    <option value="2025">2025</option>
-                  </select>
-                  <select onChange={(e) => setFilterStatus(e.target.value)} className="border border-slate-300 rounded-xl px-4 py-2.5 outline-none focus:border-indigo-500 bg-white cursor-pointer">
-                    <option value="All">Semua Status</option>
-                    <option value="Done">Done</option>
-                    <option value="In Progress">In Progress</option>
-                    <option value="To Do">To Do</option>
-                  </select>
-                </div>
+            {/* --- FILTER & ACTION BAR DIUBAH MENJADI 1 BARIS --- */}
+            <div className="flex flex-wrap gap-3 items-center bg-slate-50 p-4 rounded-2xl border border-slate-200/60">
+              
+              <div className="relative group flex-grow">
+                <Search className="absolute left-3.5 top-3 w-4 h-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
+                <input 
+                  type="text" 
+                  placeholder="Cari job / proyek..." 
+                  onChange={(e) => setSearchTerm(e.target.value)} 
+                  className="pl-10 pr-4 py-2.5 bg-white border border-slate-300 rounded-xl outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 w-full transition-all text-sm font-medium placeholder:font-normal" 
+                />
               </div>
-              <div className="flex items-center gap-3">
-                <button onClick={() => setIsAddProjectModalOpen(true)} className="bg-white border border-slate-300 text-slate-700 px-4 py-2.5 rounded-xl font-medium flex items-center gap-2">
-                  <FolderPlus className="w-4 h-4" /> Proyek Baru
+
+              <select onChange={(e) => setFilterYear(e.target.value)} className="border border-slate-300 rounded-xl px-4 py-2.5 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 bg-white cursor-pointer text-sm font-medium transition-all">
+                <option value="All">Semua Tahun</option>
+                <option value="2026">2026</option>
+                <option value="2025">2025</option>
+              </select>
+
+              <select onChange={(e) => setFilterStatus(e.target.value)} className="border border-slate-300 rounded-xl px-4 py-2.5 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 bg-white cursor-pointer text-sm font-medium transition-all">
+                <option value="All">Semua Status</option>
+                <option value="Done">Done</option>
+                <option value="In Progress">In Progress</option>
+                <option value="To Do">To Do</option>
+              </select>
+
+              <div className="relative" ref={dropdownRef}>
+                <button 
+                  onClick={() => setIsAddMenuOpen(!isAddMenuOpen)} 
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-medium flex items-center justify-center gap-2 shadow-sm transition-all text-sm whitespace-nowrap"
+                >
+                  <Plus className="w-4 h-4" /> Tambah Baru <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isAddMenuOpen ? 'rotate-180' : ''}`} />
                 </button>
-                <button onClick={() => setIsAddJobModalOpen(true)} className="bg-indigo-600 text-white px-5 py-2.5 rounded-xl font-medium flex items-center gap-2 shadow-sm">
-                  <Plus className="w-4 h-4" /> Tambah Job
-                </button>
+
+                {isAddMenuOpen && (
+                  <div className="absolute right-0 mt-2 w-56 bg-white border border-slate-100 rounded-xl shadow-xl z-20 py-2 overflow-hidden animate-in fade-in slide-in-from-top-2">
+                    <button 
+                      onClick={() => { setIsAddProjectModalOpen(true); setIsAddMenuOpen(false); }}
+                      className="w-full text-left px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:text-indigo-600 flex items-center gap-3 transition-colors"
+                    >
+                      <div className="bg-indigo-50 p-1.5 rounded-lg"><FolderPlus className="w-4 h-4" /></div>
+                      Proyek Induk Baru
+                    </button>
+                    <button 
+                      onClick={() => { setIsAddJobModalOpen(true); setIsAddMenuOpen(false); }}
+                      className="w-full text-left px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:text-indigo-600 flex items-center gap-3 transition-colors"
+                    >
+                      <div className="bg-indigo-50 p-1.5 rounded-lg"><Briefcase className="w-4 h-4" /></div>
+                      Job / Tugas Baru
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
             {/* --- AKHIR FILTER --- */}
-              
-                {/* KELOMPOK AKSI (Kanan) */}
-                <div className="flex items-center gap-3">
-                  <button 
-                    onClick={() => setIsAddProjectModalOpen(true)}
-                    className="flex-1 sm:flex-none bg-white border border-slate-300 text-slate-700 hover:border-indigo-500 hover:text-indigo-600 px-4 py-2.5 rounded-xl font-medium transition-all flex items-center justify-center gap-2"
-                  >
-                    <FolderPlus className="w-4 h-4" /> Proyek Baru
-                  </button>
-                  <button 
-                    onClick={() => setIsAddJobModalOpen(true)}
-                    className="flex-1 sm:flex-none bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-medium transition-all flex items-center justify-center gap-2 shadow-sm shadow-indigo-200"
-                  >
-                    <Plus className="w-4 h-4" /> Tambah Job
-                  </button>
-                </div>
-              </div>
-                  <FolderPlus className="w-4 h-4" /> Proyek Induk Baru
-                </button>
-                <button 
-                  onClick={() => setIsAddJobModalOpen(true)}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-medium transition-colors flex items-center justify-center gap-2 shadow-sm"
-                >
-                  <Plus className="w-4 h-4" /> Tambah Job
-                </button>
-              </div>
-            </div>
             
             <div className="overflow-x-auto rounded-xl border border-slate-200 mt-4">
               <table className="w-full text-left border-collapse whitespace-nowrap">
@@ -259,7 +258,6 @@ export default function ProjectDashboard() {
                 <tbody className="divide-y divide-slate-100">
                   {filteredProjects.length > 0 ? (
                     filteredProjects.map(project => {
-                      // Filter jobs for this specific project based on global filters
                       const projectJobs = jobs.filter(job => {
                         const matchesSearch = job.title.toLowerCase().includes(searchTerm.toLowerCase());
                         const matchesYear = filterYear === 'All' || job.year.toString() === filterYear;
@@ -271,8 +269,7 @@ export default function ProjectDashboard() {
 
                       return (
                         <React.Fragment key={`project-${project.id}`}>
-                          {/* PROJECT HEADER ROW */}
-                          <tr className="bg-slate-50 border-y border-slate-200">
+                          <tr className="bg-slate-50/80 border-y border-slate-200">
                             <td colSpan="6" className="p-3 pl-4">
                               <div className="flex items-center gap-2">
                                 <div className="p-1.5 bg-indigo-100 rounded-lg text-indigo-700">
@@ -283,7 +280,6 @@ export default function ProjectDashboard() {
                             </td>
                           </tr>
 
-                          {/* JOBS / ENHANCEMENTS ROWS */}
                           {projectJobs.length > 0 ? projectJobs.map(job => {
                             const assigneesInfo = initialTeamMembers.filter(m => job.assignees.includes(m.id));
                             return (
@@ -294,9 +290,9 @@ export default function ProjectDashboard() {
                                     <span className="font-medium text-slate-900">{job.title}</span>
                                   </div>
                                 </td>
-                                <td className="p-4 text-slate-600">{job.year}</td>
+                                <td className="p-4 text-slate-600 text-sm">{job.year}</td>
                                 <td className="p-4">
-                                  <span className={`px-2.5 py-1 rounded-full text-xs font-bold inline-block
+                                  <span className={`px-2.5 py-1 rounded-full text-[11px] uppercase tracking-wide font-bold inline-block
                                     ${job.status === 'Done' ? 'bg-emerald-100 text-emerald-700' : 
                                       job.status === 'In Progress' ? 'bg-blue-100 text-blue-700' : 
                                       'bg-slate-100 text-slate-700'}`}>
@@ -304,7 +300,7 @@ export default function ProjectDashboard() {
                                   </span>
                                 </td>
                                 <td className="p-4">
-                                   <span className={`px-2.5 py-1 rounded-md text-xs font-bold border inline-block
+                                   <span className={`px-2.5 py-1 rounded-md text-[11px] uppercase tracking-wide font-bold border inline-block
                                     ${job.urgency === 'High' ? 'bg-red-50 text-red-600 border-red-200' : 
                                       job.urgency === 'Medium' ? 'bg-amber-50 text-amber-600 border-amber-200' : 
                                       'bg-slate-50 text-slate-600 border-slate-200'}`}>
@@ -411,7 +407,6 @@ export default function ProjectDashboard() {
                     <input type="number" value={editJobForm.year} onChange={e => setEditJobForm({...editJobForm, year: parseInt(e.target.value)})} className="w-full border border-slate-300 rounded-lg p-2.5 outline-none focus:border-indigo-500" />
                   </div>
                   
-                  {/* Timeline & Komitmen */}
                   <div>
                     <label className="block text-sm font-bold text-slate-700 mb-1">Timeline</label>
                     <input type="text" placeholder="Misal: 12-20 Agustus 2026" value={editJobForm.timeline || ''} onChange={e => setEditJobForm({...editJobForm, timeline: e.target.value})} className="w-full border border-slate-300 rounded-lg p-2.5 outline-none focus:border-indigo-500" />
@@ -481,7 +476,6 @@ export default function ProjectDashboard() {
                     </div>
                   </div>
 
-                  {/* Assignee Card (Multi) */}
                   <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 min-w-[200px]">
                     <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-3 flex items-center gap-1.5"><User className="w-4 h-4"/> Dikerjakan Oleh:</p>
                     <div className="flex flex-col gap-3">
@@ -503,7 +497,6 @@ export default function ProjectDashboard() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                  {/* Left Column: Descriptions */}
                   <div className="md:col-span-2 space-y-6">
                     <div>
                       <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2 mb-3">
@@ -534,7 +527,6 @@ export default function ProjectDashboard() {
                     </div>
                   </div>
 
-                  {/* Right Column: Metadata */}
                   <div className="space-y-4">
                     <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
                       
@@ -560,7 +552,6 @@ export default function ProjectDashboard() {
                         <p className="font-semibold text-slate-900">{selectedJob.komitmen || '-'}</p>
                       </div>
 
-                      {/* Related Jobs List */}
                       <div className="pt-4 border-t border-slate-100">
                         <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-3 flex items-center gap-1.5"><Layers className="w-3.5 h-3.5" /> Job Lain di Proyek Ini</p>
                         <ul className="space-y-3">
