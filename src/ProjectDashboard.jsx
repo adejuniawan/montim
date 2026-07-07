@@ -23,6 +23,7 @@ import {
   Search,
   ChevronDown
 } from 'lucide-react';
+import { loadDashboardData, createProject, createJob, updateJob } from './googleSheetsApi';
 
 const initialTeamMembers = [
   { id: 'm1', name: 'Budi Santoso', avatar: 'https://api.dicebear.com/7.x/notionists/svg?seed=Budi&backgroundColor=ffdfbf' },
@@ -64,8 +65,11 @@ export default function App() {
   const [filterStatus, setFilterStatus] = useState('All');
   const [selectedJob, setSelectedJob] = useState(null);
 
-  const [projects, setProjects] = useState(initialProjects);
-  const [jobs, setJobs] = useState(initialJobs);
+  const [teamMembers, setTeamMembers] = useState([]);
+  const [projects, setProjects] = useState([]);
+  const [jobs, setJobs] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [apiError, setApiError] = useState('');
   const [isEditingJob, setIsEditingJob] = useState(false);
   const [editJobForm, setEditJobForm] = useState(null);
 
@@ -75,6 +79,28 @@ export default function App() {
   const [newJobForm, setNewJobForm] = useState(emptyJobForm);
   const [isAddProjectModalOpen, setIsAddProjectModalOpen] = useState(false);
   const [newProjectForm, setNewProjectForm] = useState(emptyProjectForm);
+
+  useEffect(() => {
+    let active = true;
+    async function loadData() {
+      try {
+        setIsLoading(true);
+        setApiError('');
+        const data = await loadDashboardData();
+        if (!active) return;
+        setProjects(data.projects);
+        setJobs(data.jobs);
+        setTeamMembers(data.teamMembers);
+        setNewJobForm(prev => ({ ...prev, projectId: prev.projectId || data.projects[0]?.id || '' }));
+      } catch (error) {
+        if (active) setApiError(error.message);
+      } finally {
+        if (active) setIsLoading(false);
+      }
+    }
+    loadData();
+    return () => { active = false; };
+  }, []);
 
   // Dropdown ref to close when clicking outside
   const dropdownRef = useRef(null);
@@ -118,29 +144,45 @@ export default function App() {
     setActiveTab('jobs');
   };
 
-  const handleSaveJobEdit = () => {
-    setJobs(jobs.map(j => j.id === editJobForm.id ? editJobForm : j));
-    setSelectedJob(editJobForm);
-    setIsEditingJob(false);
+  const handleSaveJobEdit = async () => {
+    try {
+      setApiError('');
+      const savedJob = await updateJob(editJobForm);
+      setJobs(jobs.map(j => j.id === savedJob.id ? savedJob : j));
+      setSelectedJob(savedJob);
+      setIsEditingJob(false);
+    } catch (error) {
+      setApiError(error.message);
+    }
   };
 
-  const handleSaveNewJob = (e) => {
+  const handleSaveNewJob = async (e) => {
     e.preventDefault();
     if (!newJobForm.title.trim()) return;
-    const newJob = { ...newJobForm, id: `j${Date.now()}` };
-    setJobs([newJob, ...jobs]);
-    setIsAddJobModalOpen(false);
-    setNewJobForm({ ...emptyJobForm, projectId: projects.length > 0 ? projects[0].id : '' });
+    try {
+      setApiError('');
+      const savedJob = await createJob(newJobForm);
+      setJobs([savedJob, ...jobs]);
+      setIsAddJobModalOpen(false);
+      setNewJobForm({ ...emptyJobForm, projectId: projects[0]?.id || '' });
+    } catch (error) {
+      setApiError(error.message);
+    }
   };
 
-  const handleSaveNewProject = (e) => {
+  const handleSaveNewProject = async (e) => {
     e.preventDefault();
     if (!newProjectForm.title.trim()) return;
-    const newProject = { ...newProjectForm, id: `p${Date.now()}` };
-    setProjects([newProject, ...projects]);
-    setNewJobForm(prev => ({ ...prev, projectId: newProject.id }));
-    setIsAddProjectModalOpen(false);
-    setNewProjectForm(emptyProjectForm);
+    try {
+      setApiError('');
+      const savedProject = await createProject(newProjectForm);
+      setProjects([savedProject, ...projects]);
+      setNewJobForm(prev => ({ ...prev, projectId: savedProject.id }));
+      setIsAddProjectModalOpen(false);
+      setNewProjectForm(emptyProjectForm);
+    } catch (error) {
+      setApiError(error.message);
+    }
   };
 
   const toggleAssignee = (memberId, isNewJob = false) => {
@@ -160,6 +202,14 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-8 font-sans text-slate-800 relative">
       <div className="max-w-6xl mx-auto space-y-6">
+        {isLoading && (
+          <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-xl text-sm">Memuat data dari Google Sheets...</div>
+        )}
+        {apiError && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm flex items-center gap-2">
+            <AlertCircle className="w-4 h-4" /> {apiError}
+          </div>
+        )}
         
         {/* Header Navigation */}
         <header className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col md:flex-row justify-between items-center gap-4">
@@ -281,7 +331,7 @@ export default function App() {
                           </tr>
 
                           {projectJobs.length > 0 ? projectJobs.map(job => {
-                            const assigneesInfo = initialTeamMembers.filter(m => job.assignees.includes(m.id));
+                            const assigneesInfo = teamMembers.filter(m => job.assignees.includes(m.id));
                             return (
                               <tr key={job.id} className="hover:bg-slate-50/80 transition-colors">
                                 <td className="p-4 pl-10">
@@ -419,7 +469,7 @@ export default function App() {
                   <div className="md:col-span-2">
                     <label className="block text-sm font-bold text-slate-700 mb-2">Assignees (Pilih anggota tim)</label>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                      {initialTeamMembers.map(member => (
+                      {teamMembers.map(member => (
                         <div 
                           key={member.id}
                           onClick={() => toggleAssignee(member.id)}
@@ -481,7 +531,7 @@ export default function App() {
                     <div className="flex flex-col gap-3">
                       {selectedJob.assignees.length > 0 ? (
                         selectedJob.assignees.map(memberId => {
-                          const member = initialTeamMembers.find(m => m.id === memberId);
+                          const member = teamMembers.find(m => m.id === memberId);
                           return member ? (
                             <div key={member.id} className="flex items-center gap-3">
                               <img src={member.avatar} alt={member.name} className="w-8 h-8 rounded-full border border-slate-200 bg-white shadow-sm" />
@@ -599,9 +649,9 @@ export default function App() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {initialTeamMembers.map(m => {
+                  {teamMembers.map(m => {
                     const activeJobsCount = jobs.filter(j => j.assignees.includes(m.id) && j.status !== 'Done').length;
-                    const maxJobs = 5; 
+                    const maxJobs = m.maxJobs || 5; 
                     const loadPercentage = Math.min((activeJobsCount / maxJobs) * 100, 100);
                     
                     let barColor = 'bg-emerald-400';
@@ -700,7 +750,7 @@ export default function App() {
                 <div className="md:col-span-2">
                   <label className="block text-sm font-bold text-slate-700 mb-2">Assignees (Pilih anggota tim)</label>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {initialTeamMembers.map(member => (
+                    {teamMembers.map(member => (
                       <div 
                         key={member.id}
                         onClick={() => toggleAssignee(member.id, true)}
