@@ -1,12 +1,6 @@
 export default async function handler(req, res) {
-  const apiUrl = process.env.GOOGLE_APPS_SCRIPT_URL;
-
-  if (!apiUrl) {
-    return res.status(500).json({
-      ok: false,
-      error: 'GOOGLE_APPS_SCRIPT_URL belum diatur di Vercel',
-    });
-  }
+  const apiUrl =
+    'https://script.google.com/macros/s/AKfycbzc6R5bkz055W3i1EwNXaVfx_47LpAfPKFnvXPGakMTPDYuVhdTnX4FwFJ9IYfczUsQ/exec';
 
   try {
     let response;
@@ -19,6 +13,9 @@ export default async function handler(req, res) {
         {
           method: 'GET',
           redirect: 'follow',
+          headers: {
+            Accept: 'application/json',
+          },
         }
       );
     } else if (req.method === 'POST') {
@@ -27,6 +24,7 @@ export default async function handler(req, res) {
         redirect: 'follow',
         headers: {
           'Content-Type': 'text/plain;charset=utf-8',
+          Accept: 'application/json',
         },
         body: JSON.stringify(req.body),
       });
@@ -47,7 +45,7 @@ export default async function handler(req, res) {
       return res.status(502).json({
         ok: false,
         error: 'Respons Google Apps Script bukan JSON',
-        detail: responseText.slice(0, 300),
+        detail: responseText.slice(0, 500),
       });
     }
 
