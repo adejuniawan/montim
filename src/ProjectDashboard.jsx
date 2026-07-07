@@ -179,40 +179,43 @@ export default function ProjectDashboard() {
         {/* LIST JOB VIEW */}
         {activeTab === 'jobs' && (
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
-            <div className="flex flex-col md:flex-row gap-4 justify-between">
-              
-              {/* --- FILTER & ACTION BAR BARU --- */}
-              <div className="flex flex-col lg:flex-row gap-4 justify-between bg-slate-50/50 p-4 rounded-2xl border border-slate-100">
-                
-                {/* KELOMPOK FILTER (Kiri) */}
-                <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
-                  {/* Search Input */}
-                  <div className="relative group">
-                    <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400 group-focus-within:text-indigo-500" />
-                    <input 
-                      type="text" 
-                      placeholder="Cari..." 
-                      onChange={(e) => setSearchTerm(e.target.value)} 
-                      className="pl-10 pr-4 py-2.5 border border-slate-300 rounded-xl outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 w-full sm:w-64 transition-all" 
-                    />
-                  </div>
-              
-                  {/* Filter Selects */}
-                  <div className="flex gap-3">
-                    <select onChange={(e) => setFilterYear(e.target.value)} className="border border-slate-300 rounded-xl px-4 py-2.5 outline-none focus:border-indigo-500 bg-white cursor-pointer hover:border-slate-400 transition-colors">
-                      <option value="All">Semua Tahun</option>
-                      <option value="2026">2026</option>
-                      <option value="2025">2025</option>
-                    </select>
-                    
-                    <select onChange={(e) => setFilterStatus(e.target.value)} className="border border-slate-300 rounded-xl px-4 py-2.5 outline-none focus:border-indigo-500 bg-white cursor-pointer hover:border-slate-400 transition-colors">
-                      <option value="All">Semua Status</option>
-                      <option value="Done">Done</option>
-                      <option value="In Progress">In Progress</option>
-                      <option value="To Do">To Do</option>
-                    </select>
-                  </div>
+            
+            {/* --- INI FILTER & ACTION BAR BARU --- */}
+            <div className="flex flex-col lg:flex-row gap-4 justify-between bg-slate-50/50 p-4 rounded-2xl border border-slate-100">
+              <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
+                <div className="relative group">
+                  <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400 group-focus-within:text-indigo-500" />
+                  <input 
+                    type="text" 
+                    placeholder="Cari..." 
+                    onChange={(e) => setSearchTerm(e.target.value)} 
+                    className="pl-10 pr-4 py-2.5 border border-slate-300 rounded-xl outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 w-full sm:w-64 transition-all" 
+                  />
                 </div>
+                <div className="flex gap-3">
+                  <select onChange={(e) => setFilterYear(e.target.value)} className="border border-slate-300 rounded-xl px-4 py-2.5 outline-none focus:border-indigo-500 bg-white cursor-pointer">
+                    <option value="All">Semua Tahun</option>
+                    <option value="2026">2026</option>
+                    <option value="2025">2025</option>
+                  </select>
+                  <select onChange={(e) => setFilterStatus(e.target.value)} className="border border-slate-300 rounded-xl px-4 py-2.5 outline-none focus:border-indigo-500 bg-white cursor-pointer">
+                    <option value="All">Semua Status</option>
+                    <option value="Done">Done</option>
+                    <option value="In Progress">In Progress</option>
+                    <option value="To Do">To Do</option>
+                  </select>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <button onClick={() => setIsAddProjectModalOpen(true)} className="bg-white border border-slate-300 text-slate-700 px-4 py-2.5 rounded-xl font-medium flex items-center gap-2">
+                  <FolderPlus className="w-4 h-4" /> Proyek Baru
+                </button>
+                <button onClick={() => setIsAddJobModalOpen(true)} className="bg-indigo-600 text-white px-5 py-2.5 rounded-xl font-medium flex items-center gap-2 shadow-sm">
+                  <Plus className="w-4 h-4" /> Tambah Job
+                </button>
+              </div>
+            </div>
+            {/* --- AKHIR FILTER --- */}
               
                 {/* KELOMPOK AKSI (Kanan) */}
                 <div className="flex items-center gap-3">
