@@ -2,12 +2,26 @@ const GOOGLE_SHEETS_API_URL =
   process.env.REACT_APP_GOOGLE_SHEETS_API_URL;
 
 async function parseResponse(response) {
-  const result = await response.json();
+  const responseText = await response.text();
+
+  let result;
+
+  try {
+    result = JSON.parse(responseText);
+  } catch {
+    throw new Error(
+      `Respons API bukan JSON. Status: ${response.status}. Respons: ${responseText.slice(0, 200)}`
+    );
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      result.error || `Request gagal dengan status ${response.status}`
+    );
+  }
 
   if (!result.ok) {
-    throw new Error(
-      result.error || 'Google Sheets API gagal'
-    );
+    throw new Error(result.error || 'Google Sheets API gagal');
   }
 
   return result.data;
@@ -20,11 +34,21 @@ export async function loadDashboardData() {
     );
   }
 
-  const response = await fetch(
-    `${GOOGLE_SHEETS_API_URL}?action=bootstrap`
-  );
+  const url =
+    `${GOOGLE_SHEETS_API_URL}?action=bootstrap&timestamp=${Date.now()}`;
 
-  return parseResponse(response);
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      redirect: 'follow',
+    });
+
+    return await parseResponse(response);
+  } catch (error) {
+    throw new Error(
+      `Tidak dapat terhubung ke Google Sheets API: ${error.message}`
+    );
+  }
 }
 
 async function postAction(action, payload) {
@@ -34,10 +58,10 @@ async function postAction(action, payload) {
     );
   }
 
-  const response = await fetch(
-    GOOGLE_SHEETS_API_URL,
-    {
+  try {
+    const response = await fetch(GOOGLE_SHEETS_API_URL, {
       method: 'POST',
+      redirect: 'follow',
       headers: {
         'Content-Type': 'text/plain;charset=utf-8',
       },
@@ -45,10 +69,14 @@ async function postAction(action, payload) {
         action,
         payload,
       }),
-    }
-  );
+    });
 
-  return parseResponse(response);
+    return await parseResponse(response);
+  } catch (error) {
+    throw new Error(
+      `Tidak dapat mengirim data ke Google Sheets API: ${error.message}`
+    );
+  }
 }
 
 export const createProject = payload =>
