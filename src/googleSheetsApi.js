@@ -1,21 +1,29 @@
-const GOOGLE_SHEETS_API_URL = '/api/sheets';
+const GOOGLE_SHEETS_API_URL =
+  '/api/sheets';
 
 async function parseResponse(response) {
-  const responseText = await response.text();
+  const responseText =
+    await response.text();
 
   let result;
 
   try {
-    result = JSON.parse(responseText);
-  } catch {
+    result =
+      JSON.parse(responseText);
+  } catch (error) {
     throw new Error(
-      `Respons API bukan JSON: ${responseText.slice(0, 200)}`
+      `Respons API bukan JSON: ${responseText.slice(0, 300)}`
     );
   }
 
-  if (!response.ok || !result.ok) {
+  if (
+    !response.ok ||
+    !result.ok
+  ) {
     throw new Error(
-      result.error || `Request gagal dengan status ${response.status}`
+      result.error ||
+      result.detail ||
+      `Request gagal dengan status ${response.status}`
     );
   }
 
@@ -34,26 +42,45 @@ export async function loadDashboardData() {
   return parseResponse(response);
 }
 
-async function postAction(action, payload) {
-  const response = await fetch(GOOGLE_SHEETS_API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      action,
-      payload,
-    }),
-  });
+async function postAction(
+  action,
+  payload
+) {
+  const response = await fetch(
+    GOOGLE_SHEETS_API_URL,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type':
+          'application/json',
+      },
+      body: JSON.stringify({
+        action,
+        payload,
+      }),
+    }
+  );
 
   return parseResponse(response);
 }
 
-export const createProject = payload =>
-  postAction('createProject', payload);
+export function createProject(payload) {
+  return postAction(
+    'createProject',
+    payload
+  );
+}
 
-export const createJob = payload =>
-  postAction('createJob', payload);
+export function createJob(payload) {
+  return postAction(
+    'createJob',
+    payload
+  );
+}
 
-export const updateJob = payload =>
-  postAction('updateJob', payload);
+export function updateJob(payload) {
+  return postAction(
+    'updateJob',
+    payload
+  );
+}
