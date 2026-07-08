@@ -32,6 +32,18 @@ const NAV_ITEMS = [
   { key: 'team', label: 'Tim', icon: Users },
 ];
 
+function validateEndpointUrl() {
+  if (
+    !GOOGLE_APPS_SCRIPT_URL ||
+    GOOGLE_APPS_SCRIPT_URL.includes('GANTI_DENGAN') ||
+    !GOOGLE_APPS_SCRIPT_URL.endsWith('/exec')
+  ) {
+    throw new Error(
+      'GOOGLE_APPS_SCRIPT_URL belum valid. Gunakan Web app URL Apps Script terbaru yang berakhir dengan /exec.',
+    );
+  }
+}
+
 async function parseResponse(response) {
   const text = await response.text();
   const contentType = response.headers.get('content-type') || '';
@@ -44,10 +56,12 @@ async function parseResponse(response) {
 
   if (isHtml) {
     throw new Error(
-      'Endpoint Apps Script mengembalikan halaman HTML, bukan JSON. ' +
-        'Pastikan URL menggunakan deployment Web App yang berakhir /exec, ' +
-        'akses deployment disetel ke Anyone, dan deployment sudah diperbarui.',
+      'Apps Script mengembalikan halaman HTML, bukan JSON. Gunakan Web app URL /exec terbaru, deploy sebagai Web app, pilih Execute as: Me, dan Who has access: Anyone.',
     );
+  }
+
+  if (!text.trim()) {
+    throw new Error('Apps Script mengembalikan respons kosong.');
   }
 
   let result;
@@ -56,7 +70,7 @@ async function parseResponse(response) {
     result = JSON.parse(text);
   } catch {
     throw new Error(
-      `Respons Apps Script tidak valid: ${text.slice(0, 200) || '(kosong)'}`,
+      `Respons Apps Script bukan JSON yang valid: ${text.slice(0, 180)}`,
     );
   }
 
@@ -70,8 +84,11 @@ async function parseResponse(response) {
 }
 
 async function apiGet(action = 'bootstrap') {
+  validateEndpointUrl();
+
   const url = new URL(GOOGLE_APPS_SCRIPT_URL);
   url.searchParams.set('action', action);
+  url.searchParams.set('_ts', Date.now().toString());
 
   const response = await fetch(url.toString(), {
     method: 'GET',
@@ -84,6 +101,8 @@ async function apiGet(action = 'bootstrap') {
 }
 
 async function apiPost(action, payload) {
+  validateEndpointUrl();
+
   const response = await fetch(GOOGLE_APPS_SCRIPT_URL, {
     method: 'POST',
     redirect: 'follow',
@@ -611,29 +630,20 @@ export default function App() {
 
           {!loading && tab === 'dashboard' && (
             <section className="space-y-6">
-              <div className="flex flex-col gap-4 rounded-3xl bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 p-6 text-white shadow-xl shadow-slate-300/50 sm:p-8 lg:flex-row lg:items-center lg:justify-between">
-                <div>
-                  <p className="text-sm font-semibold text-indigo-200">
-                    Ringkasan operasional
-                  </p>
-                  <h2 className="mt-2 max-w-2xl text-2xl font-extrabold tracking-tight sm:text-3xl">
-                    Pantau progres pekerjaan dan kapasitas tim dalam satu tempat.
-                  </h2>
-                  <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300">
-                    Data diperbarui langsung dari sistem kerja Anda untuk membantu pengambilan keputusan yang lebih cepat.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={reload}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 shadow-sm transition hover:bg-slate-100"
-                >
-                  <RefreshCw className="h-4 w-4" />
-                  Perbarui data
-                </button>
-              </div>
+              <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={reload}
+                disabled={loading}
+                title="Perbarui data"
+                aria-label="Perbarui data"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-indigo-600 disabled:opacity-50"
+              >
+                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
 
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <StatCard
                   label="Total project"
                   value={data.projects.length}
