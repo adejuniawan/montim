@@ -34,16 +34,36 @@ const NAV_ITEMS = [
 
 async function parseResponse(response) {
   const text = await response.text();
+  const contentType = response.headers.get('content-type') || '';
+  const normalized = text.trim().toLowerCase();
+
+  const isHtml =
+    contentType.includes('text/html') ||
+    normalized.startsWith('<!doctype html') ||
+    normalized.startsWith('<html');
+
+  if (isHtml) {
+    throw new Error(
+      'Endpoint Apps Script mengembalikan halaman HTML, bukan JSON. ' +
+        'Pastikan URL menggunakan deployment Web App yang berakhir /exec, ' +
+        'akses deployment disetel ke Anyone, dan deployment sudah diperbarui.',
+    );
+  }
+
   let result;
 
   try {
     result = JSON.parse(text);
   } catch {
-    throw new Error(`Respons Apps Script bukan JSON: ${text.slice(0, 200)}`);
+    throw new Error(
+      `Respons Apps Script tidak valid: ${text.slice(0, 200) || '(kosong)'}`,
+    );
   }
 
-  if (!response.ok || !result.ok) {
-    throw new Error(result.error || `Request gagal dengan status ${response.status}`);
+  if (!response.ok || !result?.ok) {
+    throw new Error(
+      result?.error || `Request gagal dengan status ${response.status}`,
+    );
   }
 
   return result.data;
