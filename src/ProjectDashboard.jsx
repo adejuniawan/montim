@@ -172,4 +172,3 @@ export default function App() {
     </div><div className="sticky bottom-0 flex justify-end gap-3 border-t bg-white p-5"><button onClick={() => setModal(false)} className="rounded-xl px-4 py-2 font-semibold">Batal</button><button disabled={saving} onClick={saveJob} className="rounded-xl bg-indigo-600 px-5 py-2 font-semibold text-white disabled:opacity-50"><Save className="mr-2 inline h-4 w-4" />{saving ? 'Menyimpan...' : 'Simpan'}</button></div></div></div>}
   </div>;
 }
-
