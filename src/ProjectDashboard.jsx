@@ -23,7 +23,72 @@ import {
   Search,
   ChevronDown
 } from 'lucide-react';
-import { loadDashboardData, createProject, createJob, updateJob } from './googleSheetsApi';
+const GOOGLE_APPS_SCRIPT_URL =
+  'https://script.google.com/macros/s/AKfycbzc6R5bkz055W3i1EwNXaVfx_47LpAfPKFnvXPGakMTPDYuVhdTnX4FwFJ9IYfczUsQ/exec';
+
+async function parseGoogleSheetsResponse(response) {
+  const responseText = await response.text();
+
+  let result;
+
+  try {
+    result = JSON.parse(responseText);
+  } catch {
+    throw new Error(
+      `Respons Google Apps Script bukan JSON: ${responseText.slice(0, 200)}`
+    );
+  }
+
+  if (!response.ok || !result.ok) {
+    throw new Error(
+      result.error || `Request gagal dengan status ${response.status}`
+    );
+  }
+
+  return result.data;
+}
+
+async function loadDashboardData() {
+  const url = new URL(GOOGLE_APPS_SCRIPT_URL);
+  url.searchParams.set('action', 'bootstrap');
+
+  const response = await fetch(url.toString(), {
+    method: 'GET',
+    redirect: 'follow',
+    cache: 'no-store',
+    headers: {
+      Accept: 'application/json',
+    },
+  });
+
+  return parseGoogleSheetsResponse(response);
+}
+
+async function postGoogleSheetsAction(action, payload) {
+  const response = await fetch(GOOGLE_APPS_SCRIPT_URL, {
+    method: 'POST',
+    redirect: 'follow',
+    headers: {
+      'Content-Type': 'text/plain;charset=utf-8',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify({
+      action,
+      payload,
+    }),
+  });
+
+  return parseGoogleSheetsResponse(response);
+}
+
+const createProject = payload =>
+  postGoogleSheetsAction('createProject', payload);
+
+const createJob = payload =>
+  postGoogleSheetsAction('createJob', payload);
+
+const updateJob = payload =>
+  postGoogleSheetsAction('updateJob', payload);
 
 const initialTeamMembers = [
   { id: 'm1', name: 'Budi Santoso', avatar: 'https://api.dicebear.com/7.x/notionists/svg?seed=Budi&backgroundColor=ffdfbf' },
