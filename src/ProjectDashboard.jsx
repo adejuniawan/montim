@@ -1,903 +1,174 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Briefcase,
-  BarChart3,
-  ListTodo,
-  Eye,
-  ArrowLeft,
-  ExternalLink,
-  FileText,
-  Link as LinkIcon,
-  User,
-  Calendar,
-  AlertCircle,
-  Pencil,
-  Save,
-  X,
-  Layers,
-  Plus,
-  Target,
-  CalendarDays,
-  FolderPlus,
-  CornerDownRight,
-  Search,
-  ChevronDown
+  AlertCircle, ArrowLeft, BarChart3, Briefcase, ExternalLink,
+  Eye, FileText, Layers, ListTodo, Loader2, Pencil, Plus,
+  Save, Search, Sheet, Trash2, User, X
 } from 'lucide-react';
-const GOOGLE_APPS_SCRIPT_URL =
-  'https://script.google.com/macros/s/AKfycbzc6R5bkz055W3i1EwNXaVfx_47LpAfPKFnvXPGakMTPDYuVhdTnX4FwFJ9IYfczUsQ/exec';
 
-async function parseGoogleSheetsResponse(response) {
-  const responseText = await response.text();
+// HARDCODE LINK DI SINI
+const GOOGLE_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1kd3yNWR_vjxIAhxlF1eWxVHvn2fuOroEvWvDGpoZYLY/edit';
+const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz0GXwaDtENIML_Cjd8msndf4b_82fDep9Bbn069MfHcyYHVz-N7JKQwj-QsZMGYc_L/exec';
 
+async function parseResponse(response) {
+  const text = await response.text();
   let result;
-
-  try {
-    result = JSON.parse(responseText);
-  } catch {
-    throw new Error(
-      `Respons Google Apps Script bukan JSON: ${responseText.slice(0, 200)}`
-    );
-  }
-
-  if (!response.ok || !result.ok) {
-    throw new Error(
-      result.error || `Request gagal dengan status ${response.status}`
-    );
-  }
-
+  try { result = JSON.parse(text); }
+  catch { throw new Error(`Respons Apps Script bukan JSON: ${text.slice(0, 200)}`); }
+  if (!response.ok || !result.ok) throw new Error(result.error || `HTTP ${response.status}`);
   return result.data;
 }
 
-async function loadDashboardData() {
+async function apiGet(action = 'bootstrap') {
   const url = new URL(GOOGLE_APPS_SCRIPT_URL);
-  url.searchParams.set('action', 'bootstrap');
-
-  const response = await fetch(url.toString(), {
-    method: 'GET',
-    redirect: 'follow',
-    cache: 'no-store',
-    headers: {
-      Accept: 'application/json',
-    },
-  });
-
-  return parseGoogleSheetsResponse(response);
+  url.searchParams.set('action', action);
+  return parseResponse(await fetch(url, { cache: 'no-store' }));
 }
 
-async function postGoogleSheetsAction(action, payload) {
-  const response = await fetch(GOOGLE_APPS_SCRIPT_URL, {
+async function apiPost(action, payload) {
+  return parseResponse(await fetch(GOOGLE_APPS_SCRIPT_URL, {
     method: 'POST',
-    redirect: 'follow',
-    headers: {
-      'Content-Type': 'text/plain;charset=utf-8',
-      Accept: 'application/json',
-    },
-    body: JSON.stringify({
-      action,
-      payload,
-    }),
-  });
-
-  return parseGoogleSheetsResponse(response);
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ action, payload }),
+  }));
 }
 
-const createProject = payload =>
-  postGoogleSheetsAction('createProject', payload);
+const emptyJob = projectId => ({
+  projectId: projectId || '', title: '', year: new Date().getFullYear(),
+  status: 'To Do', urgency: 'Medium', assignees: [], timeline: '',
+  komitmen: '', description: '', link: '',
+});
 
-const createJob = payload =>
-  postGoogleSheetsAction('createJob', payload);
+function FieldInput({ column, value, onChange, members }) {
+  const options = String(column.options || '').split('|').filter(Boolean);
+  const common = 'w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10';
 
-const updateJob = payload =>
-  postGoogleSheetsAction('updateJob', payload);
-
-const initialTeamMembers = [
-  { id: 'm1', name: 'Budi Santoso', avatar: 'https://api.dicebear.com/7.x/notionists/svg?seed=Budi&backgroundColor=ffdfbf' },
-  { id: 'm2', name: 'Siti Aminah', avatar: 'https://api.dicebear.com/7.x/notionists/svg?seed=Siti&backgroundColor=c0aede' },
-  { id: 'm3', name: 'Andi Wijaya', avatar: 'https://api.dicebear.com/7.x/notionists/svg?seed=Andi&backgroundColor=b6e3f4' },
-  { id: 'm4', name: 'Rina Kusuma', avatar: 'https://api.dicebear.com/7.x/notionists/svg?seed=Rina&backgroundColor=ffd5dc' },
-];
-
-// Proyek Induk
-const initialProjects = [
-  { id: 'p1', title: 'Redesign Landing Page', year: 2026, urgency: 'High', status: 'In Progress' },
-  { id: 'p2', title: 'API Authentication', year: 2026, urgency: 'High', status: 'To Do' },
-  { id: 'p3', title: 'User Research Q3', year: 2025, urgency: 'Medium', status: 'Done' },
-];
-
-// Jobs / Enhancement dari Proyek Induk
-const initialJobs = [
-  { id: 'j1', projectId: 'p1', title: 'Wireframe Homepage', year: 2026, status: 'Done', assignees: ['m3'], urgency: 'High', description: 'Membuat rancangan tata letak dasar (low-fidelity dan high-fidelity) untuk halaman utama website baru.', link: 'https://figma.com/file/example-wireframe', timeline: '1 - 10 Agustus 2026', komitmen: '20 Jam/Minggu' },
-  { id: 'j2', projectId: 'p1', title: 'Implement Hero Section', year: 2026, status: 'In Progress', assignees: ['m1', 'm2'], urgency: 'High', description: 'Melakukan slicing desain Figma ke dalam bentuk komponen React dengan Tailwind CSS untuk bagian atas halaman.', link: 'https://github.com/example/repo/pull/1', timeline: '12 - 25 Agustus 2026', komitmen: 'Full-time' },
-  { id: 'j5', projectId: 'p1', title: 'A/B Testing Setup', year: 2026, status: 'In Progress', assignees: ['m1'], urgency: 'Medium', description: 'Menyiapkan alat analitik (Google Optimize / VWO) untuk membandingkan performa tombol CTA lama vs baru.', link: 'https://analytics.google.com/example', timeline: '1 - 5 September 2026', komitmen: '5 Jam/Minggu' },
-  { id: 'j3', projectId: 'p2', title: 'Database Schema', year: 2026, status: 'Done', assignees: ['m2'], urgency: 'High', description: 'Merancang struktur tabel untuk penyimpanan kredensial pengguna, token sesi, dan riwayat login.', link: 'https://dbdiagram.io/d/example', timeline: 'Q1 2026', komitmen: '10 Jam/Minggu' },
-  { id: 'j4', projectId: 'p3', title: 'Data Analysis', year: 2025, status: 'To Do', assignees: ['m3', 'm4'], urgency: 'Medium', description: 'Menganalisis hasil dari 50+ wawancara pengguna dan mengelompokkan keluhan utama (pain points) ke dalam laporan akhir.', link: 'https://docs.google.com/spreadsheets/example', timeline: 'September - Oktober 2025', komitmen: 'Dedikasi Tinggi (Prioritas)' },
-];
-
-const emptyJobForm = {
-  title: '', projectId: 'p1', year: new Date().getFullYear(), status: 'To Do', 
-  assignees: [], urgency: 'Medium', description: '', link: '', 
-  timeline: '', komitmen: ''
-};
-
-const emptyProjectForm = {
-  title: '', year: new Date().getFullYear(), urgency: 'Medium', status: 'To Do'
-};
-
-export default function App() {
-  const [activeTab, setActiveTab] = useState('jobs'); 
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterYear, setFilterYear] = useState('All');
-  const [filterStatus, setFilterStatus] = useState('All');
-  const [selectedJob, setSelectedJob] = useState(null);
-
-  const [teamMembers, setTeamMembers] = useState([]);
-  const [projects, setProjects] = useState([]);
-  const [jobs, setJobs] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [apiError, setApiError] = useState('');
-  const [isEditingJob, setIsEditingJob] = useState(false);
-  const [editJobForm, setEditJobForm] = useState(null);
-
-  // Modals & Menu State
-  const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
-  const [isAddJobModalOpen, setIsAddJobModalOpen] = useState(false);
-  const [newJobForm, setNewJobForm] = useState(emptyJobForm);
-  const [isAddProjectModalOpen, setIsAddProjectModalOpen] = useState(false);
-  const [newProjectForm, setNewProjectForm] = useState(emptyProjectForm);
-
-  useEffect(() => {
-    let active = true;
-    async function loadData() {
-      try {
-        setIsLoading(true);
-        setApiError('');
-        const data = await loadDashboardData();
-        if (!active) return;
-        setProjects(data.projects);
-        setJobs(data.jobs);
-        setTeamMembers(data.teamMembers);
-        setNewJobForm(prev => ({ ...prev, projectId: prev.projectId || data.projects[0]?.id || '' }));
-      } catch (error) {
-        if (active) setApiError(error.message);
-      } finally {
-        if (active) setIsLoading(false);
-      }
-    }
-    loadData();
-    return () => { active = false; };
-  }, []);
-
-  // Dropdown ref to close when clicking outside
-  const dropdownRef = useRef(null);
-  useEffect(() => {
-    function handleClickOutside(event) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setIsAddMenuOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  // Filtering logic
-  const filteredProjects = projects.filter(project => {
-    const projectMatchesSearch = project.title.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    // Check if any job in this project matches all filters
-    const hasMatchingJobs = jobs.some(job => {
-      const matchesSearch = job.title.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesYear = filterYear === 'All' || job.year.toString() === filterYear;
-      const matchesStatus = filterStatus === 'All' || job.status === filterStatus;
-      return job.projectId === project.id && matchesSearch && matchesYear && matchesStatus;
-    });
-
-    if (searchTerm) return projectMatchesSearch || hasMatchingJobs;
-    if (filterYear !== 'All' || filterStatus !== 'All') return hasMatchingJobs;
-    
-    return true; 
-  });
-
-  const handleViewJobDetail = (job) => {
-    setSelectedJob(job);
-    setIsEditingJob(false);
-    setActiveTab('jobDetail');
-  };
-
-  const handleBackToList = () => {
-    setSelectedJob(null);
-    setIsEditingJob(false);
-    setActiveTab('jobs');
-  };
-
-  const handleSaveJobEdit = async () => {
-    try {
-      setApiError('');
-      const savedJob = await updateJob(editJobForm);
-      setJobs(jobs.map(j => j.id === savedJob.id ? savedJob : j));
-      setSelectedJob(savedJob);
-      setIsEditingJob(false);
-    } catch (error) {
-      setApiError(error.message);
-    }
-  };
-
-  const handleSaveNewJob = async (e) => {
-    e.preventDefault();
-    if (!newJobForm.title.trim()) return;
-    try {
-      setApiError('');
-      const savedJob = await createJob(newJobForm);
-      setJobs([savedJob, ...jobs]);
-      setIsAddJobModalOpen(false);
-      setNewJobForm({ ...emptyJobForm, projectId: projects[0]?.id || '' });
-    } catch (error) {
-      setApiError(error.message);
-    }
-  };
-
-  const handleSaveNewProject = async (e) => {
-    e.preventDefault();
-    if (!newProjectForm.title.trim()) return;
-    try {
-      setApiError('');
-      const savedProject = await createProject(newProjectForm);
-      setProjects([savedProject, ...projects]);
-      setNewJobForm(prev => ({ ...prev, projectId: savedProject.id }));
-      setIsAddProjectModalOpen(false);
-      setNewProjectForm(emptyProjectForm);
-    } catch (error) {
-      setApiError(error.message);
-    }
-  };
-
-  const toggleAssignee = (memberId, isNewJob = false) => {
-    if (isNewJob) {
-      setNewJobForm(prev => {
-        const isAssigned = prev.assignees.includes(memberId);
-        return { ...prev, assignees: isAssigned ? prev.assignees.filter(id => id !== memberId) : [...prev.assignees, memberId] };
-      });
-    } else {
-      setEditJobForm(prev => {
-        const isAssigned = prev.assignees.includes(memberId);
-        return { ...prev, assignees: isAssigned ? prev.assignees.filter(id => id !== memberId) : [...prev.assignees, memberId] };
-      });
-    }
-  };
-
-  return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-8 font-sans text-slate-800 relative">
-      <div className="max-w-6xl mx-auto space-y-6">
-        {isLoading && (
-          <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-xl text-sm">Memuat data dari Google Sheets...</div>
-        )}
-        {apiError && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm flex items-center gap-2">
-            <AlertCircle className="w-4 h-4" /> {apiError}
-          </div>
-        )}
-        
-        {/* Header Navigation */}
-        <header className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col md:flex-row justify-between items-center gap-4">
-          <h1 className="text-2xl font-extrabold flex items-center gap-3">
-            <div className="bg-indigo-600 p-2 rounded-xl text-white"><Briefcase className="w-6 h-6" /></div>
-            Dashboard Kerja
-          </h1>
-          <div className="flex bg-slate-100 p-1 rounded-xl">
-            <button 
-              onClick={handleBackToList} 
-              className={`px-6 py-2 rounded-lg font-medium text-sm flex items-center gap-2 transition-colors ${activeTab === 'jobs' || activeTab === 'jobDetail' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-600 hover:bg-slate-200'}`}
-            >
-              <ListTodo className="w-4 h-4" /> List Job
-            </button>
-            <button 
-              onClick={() => setActiveTab('team')} 
-              className={`px-6 py-2 rounded-lg font-medium text-sm flex items-center gap-2 transition-colors ${activeTab === 'team' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-600 hover:bg-slate-200'}`}
-            >
-              <BarChart3 className="w-4 h-4" /> Work load
-            </button>
-          </div>
-        </header>
-
-        {/* LIST JOB VIEW */}
-        {activeTab === 'jobs' && (
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
-            
-            {/* --- FILTER & ACTION BAR DIUBAH MENJADI 1 BARIS --- */}
-            <div className="flex flex-wrap gap-3 items-center bg-slate-50 p-4 rounded-2xl border border-slate-200/60">
-              
-              <div className="relative group flex-grow">
-                <Search className="absolute left-3.5 top-3 w-4 h-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
-                <input 
-                  type="text" 
-                  placeholder="Cari job / proyek..." 
-                  onChange={(e) => setSearchTerm(e.target.value)} 
-                  className="pl-10 pr-4 py-2.5 bg-white border border-slate-300 rounded-xl outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 w-full transition-all text-sm font-medium placeholder:font-normal" 
-                />
-              </div>
-
-              <select onChange={(e) => setFilterYear(e.target.value)} className="border border-slate-300 rounded-xl px-4 py-2.5 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 bg-white cursor-pointer text-sm font-medium transition-all">
-                <option value="All">Semua Tahun</option>
-                <option value="2026">2026</option>
-                <option value="2025">2025</option>
-              </select>
-
-              <select onChange={(e) => setFilterStatus(e.target.value)} className="border border-slate-300 rounded-xl px-4 py-2.5 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 bg-white cursor-pointer text-sm font-medium transition-all">
-                <option value="All">Semua Status</option>
-                <option value="Done">Done</option>
-                <option value="In Progress">In Progress</option>
-                <option value="To Do">To Do</option>
-              </select>
-
-              <div className="relative" ref={dropdownRef}>
-                <button 
-                  onClick={() => setIsAddMenuOpen(!isAddMenuOpen)} 
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-medium flex items-center justify-center gap-2 shadow-sm transition-all text-sm whitespace-nowrap"
-                >
-                  <Plus className="w-4 h-4" /> Tambah Baru <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isAddMenuOpen ? 'rotate-180' : ''}`} />
-                </button>
-
-                {isAddMenuOpen && (
-                  <div className="absolute right-0 mt-2 w-56 bg-white border border-slate-100 rounded-xl shadow-xl z-20 py-2 overflow-hidden animate-in fade-in slide-in-from-top-2">
-                    <button 
-                      onClick={() => { setIsAddProjectModalOpen(true); setIsAddMenuOpen(false); }}
-                      className="w-full text-left px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:text-indigo-600 flex items-center gap-3 transition-colors"
-                    >
-                      <div className="bg-indigo-50 p-1.5 rounded-lg"><FolderPlus className="w-4 h-4" /></div>
-                      Proyek Induk Baru
-                    </button>
-                    <button 
-                      onClick={() => { setIsAddJobModalOpen(true); setIsAddMenuOpen(false); }}
-                      className="w-full text-left px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:text-indigo-600 flex items-center gap-3 transition-colors"
-                    >
-                      <div className="bg-indigo-50 p-1.5 rounded-lg"><Briefcase className="w-4 h-4" /></div>
-                      Job / Tugas Baru
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-            {/* --- AKHIR FILTER --- */}
-            
-            <div className="overflow-x-auto rounded-xl border border-slate-200 mt-4">
-              <table className="w-full text-left border-collapse whitespace-nowrap">
-                <thead>
-                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 text-sm">
-                    <th className="p-4 font-semibold w-1/3">List Proyek & Job</th>
-                    <th className="p-4 font-semibold">Tahun</th>
-                    <th className="p-4 font-semibold">Status</th>
-                    <th className="p-4 font-semibold">Urgensi</th>
-                    <th className="p-4 font-semibold">Member</th>
-                    <th className="p-4 font-semibold text-center">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {filteredProjects.length > 0 ? (
-                    filteredProjects.map(project => {
-                      const projectJobs = jobs.filter(job => {
-                        const matchesSearch = job.title.toLowerCase().includes(searchTerm.toLowerCase());
-                        const matchesYear = filterYear === 'All' || job.year.toString() === filterYear;
-                        const matchesStatus = filterStatus === 'All' || job.status === filterStatus;
-                        return job.projectId === project.id && 
-                               (searchTerm === '' || matchesSearch || project.title.toLowerCase().includes(searchTerm.toLowerCase())) && 
-                               matchesYear && matchesStatus;
-                      });
-
-                      return (
-                        <React.Fragment key={`project-${project.id}`}>
-                          <tr className="bg-slate-50/80 border-y border-slate-200">
-                            <td colSpan="6" className="p-3 pl-4">
-                              <div className="flex items-center gap-2">
-                                <div className="p-1.5 bg-indigo-100 rounded-lg text-indigo-700">
-                                  <Layers className="w-4 h-4" />
-                                </div>
-                                <span className="font-bold text-slate-800">{project.title}</span>
-                              </div>
-                            </td>
-                          </tr>
-
-                          {projectJobs.length > 0 ? projectJobs.map(job => {
-                            const assigneesInfo = teamMembers.filter(m => job.assignees.includes(m.id));
-                            return (
-                              <tr key={job.id} className="hover:bg-slate-50/80 transition-colors">
-                                <td className="p-4 pl-10">
-                                  <div className="flex items-center gap-2">
-                                    <CornerDownRight className="w-4 h-4 text-slate-300" />
-                                    <span className="font-medium text-slate-900">{job.title}</span>
-                                  </div>
-                                </td>
-                                <td className="p-4 text-slate-600 text-sm">{job.year}</td>
-                                <td className="p-4">
-                                  <span className={`px-2.5 py-1 rounded-full text-[11px] uppercase tracking-wide font-bold inline-block
-                                    ${job.status === 'Done' ? 'bg-emerald-100 text-emerald-700' : 
-                                      job.status === 'In Progress' ? 'bg-blue-100 text-blue-700' : 
-                                      'bg-slate-100 text-slate-700'}`}>
-                                    {job.status}
-                                  </span>
-                                </td>
-                                <td className="p-4">
-                                   <span className={`px-2.5 py-1 rounded-md text-[11px] uppercase tracking-wide font-bold border inline-block
-                                    ${job.urgency === 'High' ? 'bg-red-50 text-red-600 border-red-200' : 
-                                      job.urgency === 'Medium' ? 'bg-amber-50 text-amber-600 border-amber-200' : 
-                                      'bg-slate-50 text-slate-600 border-slate-200'}`}>
-                                    {job.urgency}
-                                  </span>
-                                </td>
-                                <td className="p-4">
-                                  <div className="flex -space-x-2 overflow-hidden">
-                                    {assigneesInfo.length > 0 ? assigneesInfo.map(member => (
-                                      <img key={member.id} src={member.avatar} alt={member.name} title={member.name} className="w-8 h-8 rounded-full bg-slate-100 border-2 border-white shadow-sm" />
-                                    )) : (
-                                      <span className="text-slate-400 text-sm italic">-</span>
-                                    )}
-                                  </div>
-                                </td>
-                                <td className="p-4 text-center">
-                                  <button 
-                                    onClick={() => handleViewJobDetail(job)}
-                                    className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors inline-flex items-center justify-center gap-1 text-sm font-medium"
-                                    title="Lihat Detail"
-                                  >
-                                    <Eye className="w-4 h-4" /> Detail
-                                  </button>
-                                </td>
-                              </tr>
-                            );
-                          }) : (
-                            <tr>
-                              <td colSpan="6" className="p-4 pl-12 text-slate-400 text-sm italic">
-                                Belum ada job/tugas untuk proyek ini yang sesuai dengan filter.
-                              </td>
-                            </tr>
-                          )}
-                        </React.Fragment>
-                      );
-                    })
-                  ) : (
-                    <tr>
-                      <td colSpan="6" className="p-8 text-center text-slate-500">
-                        Tidak ada Proyek atau Job yang sesuai dengan filter pencarian.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* JOB DETAIL VIEW */}
-        {activeTab === 'jobDetail' && selectedJob && (
-          <div className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-slate-100 animate-in slide-in-from-right-8 duration-300">
-            <div className="flex justify-between items-center mb-6">
-              <button 
-                onClick={handleBackToList}
-                className="flex items-center gap-2 text-slate-500 hover:text-indigo-600 font-medium transition-colors text-sm bg-slate-50 hover:bg-indigo-50 px-4 py-2 rounded-lg w-fit"
-              >
-                <ArrowLeft className="w-4 h-4" /> Kembali ke List Job
-              </button>
-              
-              {!isEditingJob && (
-                <button
-                  onClick={() => { setEditJobForm(selectedJob); setIsEditingJob(true); }}
-                  className="flex items-center gap-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white font-medium transition-colors text-sm px-4 py-2 rounded-lg"
-                >
-                  <Pencil className="w-4 h-4" /> Edit Job
-                </button>
-              )}
-            </div>
-
-            {isEditingJob ? (
-              <div className="space-y-6 animate-in fade-in duration-300">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-bold text-slate-700 mb-1">Judul Pekerjaan (Job)</label>
-                    <input type="text" value={editJobForm.title} onChange={e => setEditJobForm({...editJobForm, title: e.target.value})} className="w-full border border-slate-300 rounded-lg p-2.5 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-1">Proyek Induk</label>
-                    <select value={editJobForm.projectId} onChange={e => setEditJobForm({...editJobForm, projectId: e.target.value})} className="w-full border border-slate-300 rounded-lg p-2.5 outline-none focus:border-indigo-500">
-                      {projects.map(p => (
-                        <option key={p.id} value={p.id}>{p.title}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-1">Status</label>
-                    <select value={editJobForm.status} onChange={e => setEditJobForm({...editJobForm, status: e.target.value})} className="w-full border border-slate-300 rounded-lg p-2.5 outline-none focus:border-indigo-500">
-                      <option value="To Do">To Do</option>
-                      <option value="In Progress">In Progress</option>
-                      <option value="Done">Done</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-1">Urgensi</label>
-                    <select value={editJobForm.urgency} onChange={e => setEditJobForm({...editJobForm, urgency: e.target.value})} className="w-full border border-slate-300 rounded-lg p-2.5 outline-none focus:border-indigo-500">
-                      <option value="High">High</option>
-                      <option value="Medium">Medium</option>
-                      <option value="Low">Low</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-1">Tahun Pelaksanaan</label>
-                    <input type="number" value={editJobForm.year} onChange={e => setEditJobForm({...editJobForm, year: parseInt(e.target.value)})} className="w-full border border-slate-300 rounded-lg p-2.5 outline-none focus:border-indigo-500" />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-1">Timeline</label>
-                    <input type="text" placeholder="Misal: 12-20 Agustus 2026" value={editJobForm.timeline || ''} onChange={e => setEditJobForm({...editJobForm, timeline: e.target.value})} className="w-full border border-slate-300 rounded-lg p-2.5 outline-none focus:border-indigo-500" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-1">Komitmen (Beban/Waktu)</label>
-                    <input type="text" placeholder="Misal: 10 Jam/Minggu, Full-time" value={editJobForm.komitmen || ''} onChange={e => setEditJobForm({...editJobForm, komitmen: e.target.value})} className="w-full border border-slate-300 rounded-lg p-2.5 outline-none focus:border-indigo-500" />
-                  </div>
-
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-bold text-slate-700 mb-2">Assignees (Pilih anggota tim)</label>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                      {teamMembers.map(member => (
-                        <div 
-                          key={member.id}
-                          onClick={() => toggleAssignee(member.id)}
-                          className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-all ${
-                            editJobForm.assignees.includes(member.id) 
-                              ? 'border-indigo-500 bg-indigo-50/50 ring-1 ring-indigo-500' 
-                              : 'border-slate-200 hover:border-slate-300 bg-white'
-                          }`}
-                        >
-                          <img src={member.avatar} alt="" className="w-6 h-6 rounded-full bg-slate-100" />
-                          <span className="text-sm font-medium text-slate-700 truncate">{member.name.split(' ')[0]}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-bold text-slate-700 mb-1">Deskripsi</label>
-                    <textarea value={editJobForm.description} onChange={e => setEditJobForm({...editJobForm, description: e.target.value})} className="w-full border border-slate-300 rounded-lg p-2.5 outline-none focus:border-indigo-500 min-h-[100px] resize-y" />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-bold text-slate-700 mb-1">Tautan Terkait</label>
-                    <input type="url" value={editJobForm.link} onChange={e => setEditJobForm({...editJobForm, link: e.target.value})} className="w-full border border-slate-300 rounded-lg p-2.5 outline-none focus:border-indigo-500" />
-                  </div>
-                </div>
-                
-                <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
-                  <button onClick={() => setIsEditingJob(false)} className="flex items-center gap-2 px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium transition-colors">
-                    <X className="w-4 h-4" /> Batal
-                  </button>
-                  <button onClick={handleSaveJobEdit} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg font-medium transition-colors">
-                    <Save className="w-4 h-4" /> Simpan Perubahan
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <>
-                <div className="flex flex-col md:flex-row md:items-start justify-between gap-6 border-b border-slate-100 pb-6 mb-6 animate-in fade-in duration-300">
-                  <div>
-                    <h2 className="text-2xl font-bold text-slate-900 mb-3">{selectedJob.title}</h2>
-                    <div className="flex flex-wrap items-center gap-3 text-sm">
-                      <span className={`px-3 py-1.5 rounded-full font-bold
-                        ${selectedJob.status === 'Done' ? 'bg-emerald-100 text-emerald-700' : 
-                          selectedJob.status === 'In Progress' ? 'bg-blue-100 text-blue-700' : 
-                          'bg-slate-100 text-slate-700'}`}>
-                        {selectedJob.status}
-                      </span>
-                      <span className={`px-3 py-1.5 rounded-md font-bold border
-                        ${selectedJob.urgency === 'High' ? 'bg-red-50 text-red-600 border-red-200' : 
-                          selectedJob.urgency === 'Medium' ? 'bg-amber-50 text-amber-600 border-amber-200' : 
-                          'bg-slate-50 text-slate-600 border-slate-200'}`}>
-                        Urgensi: {selectedJob.urgency}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 min-w-[200px]">
-                    <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-3 flex items-center gap-1.5"><User className="w-4 h-4"/> Dikerjakan Oleh:</p>
-                    <div className="flex flex-col gap-3">
-                      {selectedJob.assignees.length > 0 ? (
-                        selectedJob.assignees.map(memberId => {
-                          const member = teamMembers.find(m => m.id === memberId);
-                          return member ? (
-                            <div key={member.id} className="flex items-center gap-3">
-                              <img src={member.avatar} alt={member.name} className="w-8 h-8 rounded-full border border-slate-200 bg-white shadow-sm" />
-                              <p className="font-semibold text-slate-900 text-sm">{member.name}</p>
-                            </div>
-                          ) : null;
-                        })
-                      ) : (
-                        <div className="text-slate-500 text-sm italic">Belum di-assign</div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                  <div className="md:col-span-2 space-y-6">
-                    <div>
-                      <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2 mb-3">
-                        <FileText className="w-4 h-4 text-indigo-500" /> Deskripsi Pekerjaan
-                      </h3>
-                      <div className="bg-slate-50 p-5 rounded-xl border border-slate-100 text-slate-700 leading-relaxed">
-                        {selectedJob.description || <span className="italic text-slate-400">Tidak ada deskripsi yang tersedia untuk pekerjaan ini.</span>}
-                      </div>
-                    </div>
-
-                    <div>
-                      <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2 mb-3">
-                        <LinkIcon className="w-4 h-4 text-indigo-500" /> Tautan Terkait (Referensi / Hasil)
-                      </h3>
-                      {selectedJob.link ? (
-                        <a 
-                          href={selectedJob.link} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-2 px-5 py-3 bg-white border border-slate-200 hover:border-indigo-300 hover:shadow-md hover:text-indigo-600 rounded-xl transition-all font-medium text-slate-700 break-all"
-                        >
-                          {selectedJob.link}
-                          <ExternalLink className="w-4 h-4 text-slate-400 shrink-0" />
-                        </a>
-                      ) : (
-                        <p className="text-slate-500 italic text-sm">Belum ada tautan yang disematkan.</p>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
-                      
-                      <div className="mb-4">
-                        <p className="text-xs text-slate-500 font-medium uppercase tracking-wider mb-1 flex items-center gap-1.5"><Briefcase className="w-3.5 h-3.5" /> Proyek Induk</p>
-                        <p className="font-bold text-slate-900 text-lg">
-                          {projects.find(p => p.id === selectedJob.projectId)?.title || 'Tidak diketahui'}
-                        </p>
-                      </div>
-                      
-                      <div className="mb-4">
-                        <p className="text-xs text-slate-500 font-medium uppercase tracking-wider mb-1 flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" /> Tahun Pelaksanaan</p>
-                        <p className="font-semibold text-slate-900">{selectedJob.year}</p>
-                      </div>
-
-                      <div className="mb-4">
-                        <p className="text-xs text-slate-500 font-medium uppercase tracking-wider mb-1 flex items-center gap-1.5"><CalendarDays className="w-3.5 h-3.5" /> Timeline</p>
-                        <p className="font-semibold text-slate-900">{selectedJob.timeline || '-'}</p>
-                      </div>
-
-                      <div className="mb-6">
-                        <p className="text-xs text-slate-500 font-medium uppercase tracking-wider mb-1 flex items-center gap-1.5"><Target className="w-3.5 h-3.5" /> Komitmen</p>
-                        <p className="font-semibold text-slate-900">{selectedJob.komitmen || '-'}</p>
-                      </div>
-
-                      <div className="pt-4 border-t border-slate-100">
-                        <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-3 flex items-center gap-1.5"><Layers className="w-3.5 h-3.5" /> Job Lain di Proyek Ini</p>
-                        <ul className="space-y-3">
-                          {jobs.filter(j => j.projectId === selectedJob.projectId).map(relatedJob => (
-                            <li 
-                              key={relatedJob.id} 
-                              className={`text-sm flex flex-col gap-1 ${relatedJob.id === selectedJob.id ? 'bg-indigo-50 p-2 rounded-lg -mx-2' : ''}`}
-                            >
-                              <div className="flex justify-between items-start gap-2">
-                                <span className={`font-medium line-clamp-2 ${relatedJob.id === selectedJob.id ? 'text-indigo-700' : 'text-slate-700'}`}>
-                                  {relatedJob.title}
-                                </span>
-                                <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold whitespace-nowrap
-                                  ${relatedJob.status === 'Done' ? 'bg-emerald-100 text-emerald-700' : 
-                                  relatedJob.status === 'In Progress' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'}`}
-                                >
-                                  {relatedJob.status}
-                                </span>
-                              </div>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-        )}
-
-        {/* WORKLOAD VIEW */}
-        {activeTab === 'team' && (
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 animate-in fade-in slide-in-from-bottom-4 duration-300">
-             <h2 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
-                <BarChart3 className="w-5 h-5 text-indigo-600" />
-                Monitoring Work load Tim
-              </h2>
-            <div className="overflow-x-auto rounded-xl border border-slate-200">
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 text-sm">
-                    <th className="p-4 font-semibold w-1/3">Nama</th>
-                    <th className="p-4 font-semibold w-2/3">Work load (Job Aktif)</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {teamMembers.map(m => {
-                    const activeJobsCount = jobs.filter(j => j.assignees.includes(m.id) && j.status !== 'Done').length;
-                    const maxJobs = m.maxJobs || 5; 
-                    const loadPercentage = Math.min((activeJobsCount / maxJobs) * 100, 100);
-                    
-                    let barColor = 'bg-emerald-400';
-                    if (activeJobsCount >= 4) barColor = 'bg-red-500';
-                    else if (activeJobsCount >= 2) barColor = 'bg-amber-400';
-
-                    return (
-                      <tr key={m.id} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="p-4 flex items-center gap-3">
-                          <img src={m.avatar} className="w-10 h-10 rounded-full bg-slate-100 border border-slate-200 shadow-sm" alt={m.name} /> 
-                          <span className="font-semibold text-slate-900">{m.name}</span>
-                        </td>
-                        <td className="p-4">
-                          <div className="flex items-center gap-4 w-full max-w-md">
-                            <span className="text-sm font-bold w-12 text-slate-700">{activeJobsCount} Job</span>
-                            <div className="flex-1 bg-slate-100 h-2.5 rounded-full overflow-hidden">
-                              <div 
-                                className={`h-full transition-all duration-700 rounded-full ${barColor}`} 
-                                style={{ width: `${loadPercentage}%` }}
-                              ></div>
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-      </div>
-
-      {/* ADD JOB MODAL */}
-      {isAddJobModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
-            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 shrink-0">
-              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                <Plus className="w-5 h-5 text-indigo-600" /> Tambah Job Baru
-              </h2>
-              <button onClick={() => setIsAddJobModalOpen(false)} className="text-slate-400 hover:text-slate-700 bg-white hover:bg-slate-100 p-1.5 rounded-lg transition-colors">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            
-            <form onSubmit={handleSaveNewJob} className="p-6 overflow-y-auto space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-bold text-slate-700 mb-1">Judul Pekerjaan (Job) *</label>
-                  <input type="text" required value={newJobForm.title} onChange={e => setNewJobForm({...newJobForm, title: e.target.value})} className="w-full border border-slate-300 rounded-lg p-2.5 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" placeholder="Masukkan judul pekerjaan..." />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-1">Proyek Induk</label>
-                  <select value={newJobForm.projectId} onChange={e => setNewJobForm({...newJobForm, projectId: e.target.value})} className="w-full border border-slate-300 rounded-lg p-2.5 outline-none focus:border-indigo-500">
-                    {projects.map(p => (
-                      <option key={p.id} value={p.id}>{p.title}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-1">Status</label>
-                  <select value={newJobForm.status} onChange={e => setNewJobForm({...newJobForm, status: e.target.value})} className="w-full border border-slate-300 rounded-lg p-2.5 outline-none focus:border-indigo-500">
-                    <option value="To Do">To Do</option>
-                    <option value="In Progress">In Progress</option>
-                    <option value="Done">Done</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-1">Urgensi</label>
-                  <select value={newJobForm.urgency} onChange={e => setNewJobForm({...newJobForm, urgency: e.target.value})} className="w-full border border-slate-300 rounded-lg p-2.5 outline-none focus:border-indigo-500">
-                    <option value="High">High</option>
-                    <option value="Medium">Medium</option>
-                    <option value="Low">Low</option>
-                  </select>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-1">Tahun Pelaksanaan</label>
-                  <input type="number" value={newJobForm.year} onChange={e => setNewJobForm({...newJobForm, year: parseInt(e.target.value)})} className="w-full border border-slate-300 rounded-lg p-2.5 outline-none focus:border-indigo-500" />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-1">Timeline</label>
-                  <input type="text" placeholder="Misal: 12-20 Agustus 2026" value={newJobForm.timeline} onChange={e => setNewJobForm({...newJobForm, timeline: e.target.value})} className="w-full border border-slate-300 rounded-lg p-2.5 outline-none focus:border-indigo-500" />
-                </div>
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-1">Komitmen (Beban/Waktu)</label>
-                  <input type="text" placeholder="Misal: 10 Jam/Minggu, Full-time" value={newJobForm.komitmen} onChange={e => setNewJobForm({...newJobForm, komitmen: e.target.value})} className="w-full border border-slate-300 rounded-lg p-2.5 outline-none focus:border-indigo-500" />
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-bold text-slate-700 mb-2">Assignees (Pilih anggota tim)</label>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {teamMembers.map(member => (
-                      <div 
-                        key={member.id}
-                        onClick={() => toggleAssignee(member.id, true)}
-                        className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-all ${
-                          newJobForm.assignees.includes(member.id) 
-                            ? 'border-indigo-500 bg-indigo-50/50 ring-1 ring-indigo-500' 
-                            : 'border-slate-200 hover:border-slate-300 bg-white'
-                        }`}
-                      >
-                        <img src={member.avatar} alt="" className="w-6 h-6 rounded-full bg-slate-100" />
-                        <span className="text-sm font-medium text-slate-700 truncate">{member.name.split(' ')[0]}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-bold text-slate-700 mb-1">Deskripsi</label>
-                  <textarea value={newJobForm.description} onChange={e => setNewJobForm({...newJobForm, description: e.target.value})} className="w-full border border-slate-300 rounded-lg p-2.5 outline-none focus:border-indigo-500 min-h-[100px] resize-y" placeholder="Masukkan rincian singkat..." />
-                </div>
-              </div>
-              
-              <div className="flex justify-end gap-3 pt-6 border-t border-slate-100 shrink-0">
-                <button type="button" onClick={() => setIsAddJobModalOpen(false)} className="px-5 py-2.5 text-slate-600 hover:bg-slate-100 rounded-xl font-medium transition-colors">
-                  Batal
-                </button>
-                <button type="submit" className="px-5 py-2.5 bg-indigo-600 text-white hover:bg-indigo-700 rounded-xl font-medium transition-colors shadow-sm">
-                  Simpan Job
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ADD PROJECT MODAL */}
-      {isAddProjectModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col">
-            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 shrink-0">
-              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                <FolderPlus className="w-5 h-5 text-indigo-600" /> Tambah Proyek Induk Baru
-              </h2>
-              <button onClick={() => setIsAddProjectModalOpen(false)} className="text-slate-400 hover:text-slate-700 bg-white hover:bg-slate-100 p-1.5 rounded-lg transition-colors">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            
-            <form onSubmit={handleSaveNewProject} className="p-6 space-y-5">
-              <div>
-                <label className="block text-sm font-bold text-slate-700 mb-1">Nama Proyek Induk *</label>
-                <input type="text" required value={newProjectForm.title} onChange={e => setNewProjectForm({...newProjectForm, title: e.target.value})} className="w-full border border-slate-300 rounded-lg p-2.5 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" placeholder="Misal: Pengembangan Sistem HR..." />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-1">Tahun</label>
-                  <input type="number" required value={newProjectForm.year} onChange={e => setNewProjectForm({...newProjectForm, year: parseInt(e.target.value)})} className="w-full border border-slate-300 rounded-lg p-2.5 outline-none focus:border-indigo-500" />
-                </div>
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-1">Urgensi Proyek</label>
-                  <select value={newProjectForm.urgency} onChange={e => setNewProjectForm({...newProjectForm, urgency: e.target.value})} className="w-full border border-slate-300 rounded-lg p-2.5 outline-none focus:border-indigo-500">
-                    <option value="High">High</option>
-                    <option value="Medium">Medium</option>
-                    <option value="Low">Low</option>
-                  </select>
-                </div>
-              </div>
-              
-              <div className="flex justify-end gap-3 pt-6 border-t border-slate-100">
-                <button type="button" onClick={() => setIsAddProjectModalOpen(false)} className="px-5 py-2.5 text-slate-600 hover:bg-slate-100 rounded-xl font-medium transition-colors">
-                  Batal
-                </button>
-                <button type="submit" className="px-5 py-2.5 bg-indigo-600 text-white hover:bg-indigo-700 rounded-xl font-medium transition-colors shadow-sm">
-                  Buat Proyek
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
+  if (column.type === 'textarea') return <textarea className={`${common} min-h-28`} value={value || ''} onChange={e => onChange(e.target.value)} />;
+  if (column.type === 'select') return (
+    <select className={common} value={value || ''} onChange={e => onChange(e.target.value)}>
+      <option value="">Pilih...</option>{options.map(option => <option key={option}>{option}</option>)}
+    </select>
+  );
+  if (column.type === 'members') return (
+    <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
+      {members.map(member => {
+        const selected = (value || []).includes(member.id);
+        return <button key={member.id} type="button" onClick={() => onChange(selected ? value.filter(id => id !== member.id) : [...(value || []), member.id])}
+          className={`flex items-center gap-2 rounded-xl border p-2 text-left ${selected ? 'border-indigo-500 bg-indigo-50' : 'border-slate-200'}`}>
+          <img src={member.avatar} className="h-7 w-7 rounded-full" alt="" />
+          <span className="truncate text-sm font-medium">{member.name}</span>
+        </button>;
+      })}
     </div>
   );
+  return <input className={common} type={column.type === 'number' ? 'number' : column.type === 'url' ? 'url' : 'text'} value={value ?? ''}
+    onChange={e => onChange(column.type === 'number' ? Number(e.target.value) : e.target.value)} />;
+}
+
+function CellValue({ column, value, members }) {
+  if (column.type === 'members') {
+    const selected = members.filter(m => (value || []).includes(m.id));
+    return <div className="flex -space-x-2">{selected.map(m => <img key={m.id} src={m.avatar} title={m.name} className="h-8 w-8 rounded-full border-2 border-white" alt={m.name} />)}</div>;
+  }
+  if (column.type === 'url' && value) return <a className="text-indigo-600 hover:underline" href={value} target="_blank" rel="noreferrer">Buka <ExternalLink className="inline h-3 w-3" /></a>;
+  if (column.key === 'status') return <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-bold text-blue-700">{value || '-'}</span>;
+  if (column.key === 'urgency') return <span className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-700">{value || '-'}</span>;
+  return <span>{String(value ?? '-')}</span>;
+}
+
+export default function App() {
+  const [data, setData] = useState({ settings: {}, columns: [], projects: [], jobs: [], teamMembers: [] });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [tab, setTab] = useState('jobs');
+  const [search, setSearch] = useState('');
+  const [selectedJob, setSelectedJob] = useState(null);
+  const [form, setForm] = useState(null);
+  const [modal, setModal] = useState(false);
+
+  const reload = async () => {
+    try { setLoading(true); setError(''); setData(await apiGet()); }
+    catch (e) { setError(e.message); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { reload(); }, []);
+
+  const visibleColumns = useMemo(() => data.columns.filter(c => String(c.visible).toLowerCase() === 'true'), [data.columns]);
+  const editableColumns = useMemo(() => data.columns.filter(c => String(c.editable).toLowerCase() === 'true'), [data.columns]);
+  const filteredJobs = useMemo(() => data.jobs.filter(job => Object.values(job).join(' ').toLowerCase().includes(search.toLowerCase())), [data.jobs, search]);
+
+  const saveJob = async () => {
+    try {
+      setSaving(true); setError('');
+      const saved = await apiPost(form.id ? 'updateJob' : 'createJob', form);
+      setData(prev => ({ ...prev, jobs: form.id ? prev.jobs.map(j => j.id === saved.id ? saved : j) : [saved, ...prev.jobs] }));
+      setSelectedJob(saved); setForm(null); setModal(false);
+    } catch (e) { setError(e.message); }
+    finally { setSaving(false); }
+  };
+
+  const deleteJob = async job => {
+    if (!confirm(`Hapus job “${job.title}”?`)) return;
+    try {
+      await apiPost('deleteJob', { id: job.id });
+      setData(prev => ({ ...prev, jobs: prev.jobs.filter(j => j.id !== job.id) }));
+      setSelectedJob(null); setTab('jobs');
+    } catch (e) { setError(e.message); }
+  };
+
+  const settings = data.settings || {};
+
+  return <div className="min-h-screen bg-slate-50 p-4 text-slate-800 md:p-8">
+    <div className="mx-auto max-w-7xl space-y-6">
+      <header className="flex flex-col gap-4 rounded-2xl border bg-white p-6 shadow-sm md:flex-row md:items-center md:justify-between">
+        <div>
+          <h1 className="flex items-center gap-3 text-2xl font-extrabold"><span className="rounded-xl bg-indigo-600 p-2 text-white"><Briefcase /></span>{settings.appTitle || 'Dashboard Kerja'}</h1>
+          <p className="mt-1 text-sm text-slate-500">{settings.appSubtitle}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <a href={GOOGLE_SHEET_URL} target="_blank" rel="noreferrer" className="flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold hover:bg-slate-50"><Sheet className="h-4 w-4" /> Google Sheet</a>
+          <button onClick={() => { setTab('jobs'); setSelectedJob(null); }} className={`rounded-xl px-4 py-2 text-sm font-semibold ${tab === 'jobs' ? 'bg-indigo-600 text-white' : 'bg-slate-100'}`}><ListTodo className="mr-2 inline h-4 w-4" />{settings.jobsTabLabel || 'List Job'}</button>
+          <button onClick={() => setTab('team')} className={`rounded-xl px-4 py-2 text-sm font-semibold ${tab === 'team' ? 'bg-indigo-600 text-white' : 'bg-slate-100'}`}><BarChart3 className="mr-2 inline h-4 w-4" />{settings.teamTabLabel || 'Workload'}</button>
+        </div>
+      </header>
+
+      {loading && <div className="flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 p-4 text-blue-700"><Loader2 className="h-4 w-4 animate-spin" /> Memuat data Google Sheet...</div>}
+      {error && <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-4 text-red-700"><AlertCircle className="h-4 w-4" />{error}</div>}
+
+      {tab === 'jobs' && !selectedJob && <section className="rounded-2xl border bg-white p-6 shadow-sm">
+        <div className="mb-5 flex flex-col gap-3 md:flex-row">
+          <div className="relative flex-1"><Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" /><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Cari seluruh data..." className="w-full rounded-xl border py-2.5 pl-10 pr-3 outline-none focus:border-indigo-500" /></div>
+          <button onClick={() => { setForm(emptyJob(data.projects[0]?.id)); setModal(true); }} className="rounded-xl bg-indigo-600 px-5 py-2.5 font-semibold text-white"><Plus className="mr-2 inline h-4 w-4" />{settings.addButtonLabel || 'Tambah Baru'}</button>
+        </div>
+        <div className="overflow-x-auto rounded-xl border">
+          <table className="w-full text-left text-sm"><thead className="bg-slate-50 text-slate-500"><tr>
+            <th className="p-4">Proyek</th>{visibleColumns.map(c => <th key={c.key} className={`p-4 ${c.width || ''}`}>{c.label}</th>)}<th className="p-4 text-center">Aksi</th>
+          </tr></thead><tbody className="divide-y">
+            {filteredJobs.map(job => <tr key={job.id} className="hover:bg-slate-50">
+              <td className="p-4 font-semibold"><Layers className="mr-2 inline h-4 w-4 text-indigo-500" />{data.projects.find(p => p.id === job.projectId)?.title || '-'}</td>
+              {visibleColumns.map(c => <td key={c.key} className="p-4"><CellValue column={c} value={job[c.key]} members={data.teamMembers} /></td>)}
+              <td className="p-4 text-center"><button onClick={() => setSelectedJob(job)} className="rounded-lg p-2 text-indigo-600 hover:bg-indigo-50"><Eye className="h-4 w-4" /></button></td>
+            </tr>)}
+          </tbody></table>
+        </div>
+      </section>}
+
+      {tab === 'jobs' && selectedJob && <section className="rounded-2xl border bg-white p-6 shadow-sm">
+        <div className="mb-6 flex items-center justify-between"><button onClick={() => setSelectedJob(null)} className="flex items-center gap-2 text-sm font-semibold text-slate-500"><ArrowLeft className="h-4 w-4" />Kembali</button><div className="flex gap-2"><button onClick={() => { setForm(selectedJob); setModal(true); }} className="rounded-xl bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-700"><Pencil className="mr-2 inline h-4 w-4" />Edit</button><button onClick={() => deleteJob(selectedJob)} className="rounded-xl bg-red-50 px-4 py-2 text-sm font-semibold text-red-700"><Trash2 className="mr-2 inline h-4 w-4" />Hapus</button></div></div>
+        <h2 className="mb-6 text-3xl font-bold">{selectedJob.title}</h2>
+        <div className="grid gap-4 md:grid-cols-2">{data.columns.map(c => <div key={c.key} className={c.type === 'textarea' ? 'md:col-span-2' : ''}><p className="mb-1 text-xs font-bold uppercase tracking-wide text-slate-400">{c.label}</p><div className="rounded-xl bg-slate-50 p-4"><CellValue column={c} value={selectedJob[c.key]} members={data.teamMembers} /></div></div>)}</div>
+      </section>}
+
+      {tab === 'team' && <section className="rounded-2xl border bg-white p-6 shadow-sm"><h2 className="mb-5 text-lg font-bold">Monitoring Workload</h2><div className="space-y-4">{data.teamMembers.map(member => {
+        const active = data.jobs.filter(j => (j.assignees || []).includes(member.id) && j.status !== 'Done').length;
+        const max = Number(member.maxJobs || 5); const percentage = Math.min(active / max * 100, 100);
+        return <div key={member.id} className="flex items-center gap-4 rounded-xl border p-4"><img src={member.avatar} className="h-11 w-11 rounded-full" alt="" /><div className="min-w-0 flex-1"><div className="mb-2 flex justify-between"><span className="font-semibold">{member.name}</span><span className="text-sm text-slate-500">{active}/{max} job aktif</span></div><div className="h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-indigo-500" style={{ width: `${percentage}%` }} /></div></div></div>;
+      })}</div></section>}
+    </div>
+
+    {modal && form && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"><div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white shadow-2xl"><div className="sticky top-0 flex items-center justify-between border-b bg-white p-5"><h2 className="text-xl font-bold">{form.id ? 'Edit Job' : 'Tambah Job'}</h2><button onClick={() => setModal(false)}><X /></button></div><div className="grid gap-5 p-6 md:grid-cols-2">
+      <div><label className="mb-1 block text-sm font-bold">Proyek Induk</label><select value={form.projectId} onChange={e => setForm({ ...form, projectId: e.target.value })} className="w-full rounded-xl border px-3 py-2.5">{data.projects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}</select></div>
+      {editableColumns.map(column => <div key={column.key} className={column.type === 'textarea' || column.type === 'members' ? 'md:col-span-2' : ''}><label className="mb-1 block text-sm font-bold">{column.label}{String(column.required).toLowerCase() === 'true' && ' *'}</label><FieldInput column={column} value={form[column.key]} members={data.teamMembers} onChange={value => setForm({ ...form, [column.key]: value })} /></div>)}
+    </div><div className="sticky bottom-0 flex justify-end gap-3 border-t bg-white p-5"><button onClick={() => setModal(false)} className="rounded-xl px-4 py-2 font-semibold">Batal</button><button disabled={saving} onClick={saveJob} className="rounded-xl bg-indigo-600 px-5 py-2 font-semibold text-white disabled:opacity-50"><Save className="mr-2 inline h-4 w-4" />{saving ? 'Menyimpan...' : 'Simpan'}</button></div></div></div>}
+  </div>;
 }
