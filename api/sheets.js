@@ -1,20 +1,14 @@
+const GOOGLE_APPS_SCRIPT_URL =
+  'https://script.google.com/macros/s/AKfycbzc6R5bkz055W3i1EwNXaVfx_47LpAfPKFnvXPGakMTPDYuVhdTnX4FwFJ9IYfczUsQ/exec';
+
 export default async function handler(req, res) {
-  const apiUrl = process.env.GOOGLE_APPS_SCRIPT_URL;
-
-  if (!apiUrl) {
-    return res.status(500).json({
-      ok: false,
-      error: 'GOOGLE_APPS_SCRIPT_URL belum dikonfigurasi',
-    });
-  }
-
   try {
     let response;
 
     if (req.method === 'GET') {
       const action = req.query.action || 'bootstrap';
 
-      const url = new URL(apiUrl);
+      const url = new URL(GOOGLE_APPS_SCRIPT_URL);
       url.searchParams.set('action', action);
 
       response = await fetch(url.toString(), {
@@ -25,7 +19,7 @@ export default async function handler(req, res) {
         },
       });
     } else if (req.method === 'POST') {
-      response = await fetch(apiUrl, {
+      response = await fetch(GOOGLE_APPS_SCRIPT_URL, {
         method: 'POST',
         redirect: 'follow',
         headers: {
