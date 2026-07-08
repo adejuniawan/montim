@@ -1,5 +1,4 @@
-const GOOGLE_APPS_SCRIPT_URL =
-  'https://script.google.com/macros/s/AKfycbzZhZWr0GN5jxiXL4l2E0WJHh9GcfZQU1u2CqjXS6Rs5u9hsnjW2LpusUn0SzEqAW5x/exec';
+const GOOGLE_APPS_SCRIPT_URL ='https://script.google.com/macros/s/AKfycbzZhZWr0GN5jxiXL4l2E0WJHh9GcfZQU1u2CqjXS6Rs5u9hsnjW2LpusUn0SzEqAW5x/exec';
 
 function extractGoogleError(html) {
   return String(html || '')
